@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "genruler"
+version = "0.1.0"
+description = ""
+authors = ["Jeffrey04 <mycyberpet@yahoo.com>"]
+readme = "README.md"
+packages = [{include = "genruler", from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.12, <3.14"
+hy = "^1.0.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ipdb = "^0.13.13"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
