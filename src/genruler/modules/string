@@ -1,6 +1,7 @@
 from typing import Any, Callable
 
 from genruler.library import compute
+from genruler.modules.basic import field
 
 
 def concat(link: Any, *arguments: Any) -> Callable[[dict[Any, Any]], str]:
@@ -14,9 +15,9 @@ def concat(link: Any, *arguments: Any) -> Callable[[dict[Any, Any]], str]:
 
 def concat_fields(link: Any, *arguments: Any) -> Callable[[dict[Any, Any]], str]:
     def inner(context: dict[Any, Any]) -> str:
-        return concat(link, (compute(argument, context) for argument in arguments))(
-            context
-        )
+        return concat(
+            link, (field(compute(argument, context))(context) for argument in arguments)
+        )(context)
 
     return inner
 
