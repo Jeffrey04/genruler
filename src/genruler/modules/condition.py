@@ -28,6 +28,12 @@ def is_none(argument: Any) -> Callable[[dict[Any, Any]], bool]:
 
     return inner
 
+def is_true(argument: Any) -> Callable[[dict[Any, Any]], bool]:
+    def inner(context: dict[Any, Any]) -> bool:
+        return compute(argument, context) is True
+
+    return inner
+
 
 def lt(*arguments: Any) -> Callable[[dict[Any, Any]], bool]:
     return binary(operator.lt, arguments)
