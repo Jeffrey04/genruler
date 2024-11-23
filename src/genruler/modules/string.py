@@ -15,8 +15,10 @@ def concat(link: Any, *arguments: Any) -> Callable[[dict[Any, Any]], str]:
 
 def concat_fields(link: Any, *arguments: Any) -> Callable[[dict[Any, Any]], str]:
     def inner(context: dict[Any, Any]) -> str:
+        print(arguments)
         return concat(
-            link, (field(compute(argument, context))(context) for argument in arguments)
+            link,
+            *[field(compute(argument, context))(context) for argument in arguments],
         )(context)
 
     return inner

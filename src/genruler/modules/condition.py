@@ -19,7 +19,7 @@ def ge(*arguments: Any) -> Callable[[dict[Any, Any]], bool]:
 
 
 def in_(*arguments: Any) -> Callable[[dict[Any, Any]], bool]:
-    return binary(operator.contains, arguments)
+    return binary(operator.contains, arguments[::-1])
 
 
 def is_none(argument: Any) -> Callable[[dict[Any, Any]], bool]:

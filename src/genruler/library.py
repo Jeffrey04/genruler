@@ -2,7 +2,7 @@ import importlib
 from collections.abc import Callable
 from typing import Any
 
-from hy.models import Expression, Symbol
+from hy.models import Expression, Float, Integer, Object, String, Symbol
 
 
 def compute[T, U, V](argument: Callable[[T], U] | V, context: T) -> U | V:
@@ -25,9 +25,8 @@ def evaluate(sequence: Expression, result=None) -> tuple[Any] | Callable[[Any], 
                 sequence[1:],  # type: ignore
                 result
                 + (
-                    getattr(
-                        importlib.import_module(f"genruler.modules.{sequence[0][1]}"),
-                        str(sequence[0][2]),
+                    get_function(
+                        f"genruler.modules.{sequence[0][1]}", str(sequence[0][2])
                     ),
                 ),
             )
@@ -41,12 +40,33 @@ def evaluate(sequence: Expression, result=None) -> tuple[Any] | Callable[[Any], 
         else:
             to_return = evaluate(
                 sequence[1:],  # type: ignore
-                result + (sequence[0],),
+                result + (extract(sequence[0]),),
             )
 
     else:
-        assert callable(result[0])
-
-        return result[0](*result[1:])
+        if callable(result[0]):
+            to_return = result[0](*result[1:])
+        else:
+            to_return = result
 
     return to_return
+
+
+def extract(argument: type[Object]) -> Any:
+    match type(argument):
+        case String.__name__:
+            return str(argument)
+        case Integer.__name__:
+            return int(argument)
+        case Float.__name__:
+            return float(argument)
+        case _:
+            return str(argument)
+
+
+def get_function(module_name: str, function_name: str) -> Callable[..., Any]:
+    module = importlib.import_module(module_name)
+    try:
+        return getattr(module, function_name)
+    except AttributeError:
+        return getattr(module, f"{function_name}_")
