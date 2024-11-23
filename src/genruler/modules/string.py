@@ -1,7 +1,14 @@
 from typing import Any, Callable
 
 from genruler.library import compute
-from genruler.modules.basic import field
+from genruler.modules import basic
+
+
+def field(key: str, *args) -> Callable[[dict[Any, Any] | list[Any]], Any]:
+    def inner(context: dict[Any, Any] | list[Any]) -> Any:
+        return str(compute(basic.field(compute(key, context), *args), context))
+
+    return inner
 
 
 def concat(link: Any, *arguments: Any) -> Callable[[dict[Any, Any]], str]:
