@@ -2,7 +2,13 @@ import pytest
 from funcparserlib.lexer import Token
 
 from genruler import parse
-from genruler.lexer import Symbol, make_parser, make_sexp_tokenizer, read, safe_literal_eval
+from genruler.lexer import (
+    Symbol,
+    make_parser,
+    make_sexp_tokenizer,
+    read,
+    safe_literal_eval,
+)
 
 
 def test_safe_literal_eval():
@@ -30,23 +36,20 @@ def test_safe_literal_eval():
 
 
 def test_simple_expression():
-    result = parse("(boolean.tautology)", use_hy=False)
+    result = parse("(boolean.tautology)")
     assert callable(result), "Result should be callable"
     assert result({}) is True, "boolean.tautology should return True"
 
 
 def test_nested_expression():
-    result = parse(
-        "(boolean.and (boolean.tautology) (boolean.tautology))", use_hy=False
-    )
+    result = parse("(boolean.and (boolean.tautology) (boolean.tautology))")
     assert callable(result), "Result should be callable"
     assert result({}) is True, "Nested AND of two True values should be True"
 
 
 def test_complex_expression():
     result = parse(
-        "(boolean.or (boolean.and (boolean.tautology) (boolean.contradiction)) (boolean.tautology))",
-        use_hy=False,
+        "(boolean.or (boolean.and (boolean.tautology) (boolean.contradiction)) (boolean.tautology))"
     )
     assert callable(result), "Result should be callable"
     assert result({}) is True, "Complex boolean expression should evaluate correctly"
@@ -54,9 +57,7 @@ def test_complex_expression():
 
 def test_reject_atom():
     with pytest.raises(ValueError, match="Parse error"):
-        parse(
-            "boolean.tautology", use_hy=False
-        )  # Should fail - not wrapped in parentheses
+        parse("boolean.tautology")  # Should fail - not wrapped in parentheses
 
 
 def test_make_sexp_tokenizer():
@@ -155,6 +156,7 @@ def test_make_parser():
 def test_make_token_parser():
     """Test make_token_parser function."""
     from funcparserlib.parser import NoParseError
+
     from genruler.lexer import make_token_parser
 
     # Create parsers for different token types

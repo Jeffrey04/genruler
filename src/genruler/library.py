@@ -2,29 +2,29 @@ import importlib
 from collections.abc import Callable
 from typing import Any, List
 
-from hy.models import Expression, Float, Integer, Object, String, Symbol
-
 from .lexer import Symbol as genSymbol
 
 
 def compute[T, U, V](argument: Callable[[T], U] | V, context: T) -> U | V:
     """Compute the value of an argument, which can be either a callable or a value.
 
+    This function handles two cases:
+    1. If the argument is callable, it calls it with the context
+    2. If the argument is a value, it returns it as is
+
     Args:
-        argument: Either a callable that takes a context and returns a value, or a direct value.
-            If it's a callable, it will be called with the context.
-            If it's a value, it will be returned as is.
-        context: The context to pass to the callable if argument is a callable.
+        argument: Either a callable function or a value
+        context: The context to pass to the callable
 
     Returns:
-        If argument is a callable, returns the result of calling it with context.
-        If argument is a value, returns the value directly.
+        Either the result of calling the function with context,
+        or the original value if not callable
 
-    Example:
-        >>> compute(lambda x: x + 1, 5)  # Callable case
-        6
-        >>> compute(42, None)  # Direct value case
-        42
+    Examples:
+        >>> compute(lambda x: x + 1, 1)
+        2
+        >>> compute("not callable", None)
+        'not callable'
     """
     return (
         argument(context)  # type: ignore
@@ -33,55 +33,38 @@ def compute[T, U, V](argument: Callable[[T], U] | V, context: T) -> U | V:
     )
 
 
-def evaluate(
-    sequence: Expression | List[Any], result=None
-) -> tuple[Any] | Callable[[Any], Any]:
+def evaluate(sequence: List[Any], result=None) -> tuple[Any] | Callable[[Any], Any]:
     """Evaluate an S-expression sequence into a callable or value.
 
-    This function recursively evaluates S-expressions, handling several forms:
-    1. Symbol-based function calls: (module.function arg1 arg2)
-    2. Hy-style function calls: (. module function arg1 arg2)
-    3. Nested expressions: (module.function (other.function arg1) arg2)
-
-    The sequence must be wrapped in parentheses - bare literals or symbols are not accepted.
+    This function recursively evaluates S-expressions, handling function calls
+    in the form: (module.function arg1 arg2)
 
     Args:
-        sequence: The S-expression to evaluate. Must be either:
-            - A Hy Expression object
-            - A Python list from the custom parser
-            The first item in the sequence must be either:
-            - A Symbol (module.function)
-            - A nested Expression/List starting with '.'
-            Subsequent items can be:
-            - Nested expressions
-            - Literal values (strings, integers, floats)
-        result: Internal parameter for recursive evaluation.
-            Accumulates the evaluated parts of the expression.
-            Users should not pass this parameter.
+        sequence: A list representing an S-expression
+        result: Internal accumulator for recursive evaluation
 
     Returns:
-        - If evaluating a complete expression: A callable that takes a context
-        - If evaluating a partial expression: A tuple of evaluated values
+        Either a callable function or a tuple of values
 
     Raises:
-        ValueError: If the sequence is not properly wrapped in parentheses
-        AssertionError: If a Symbol doesn't contain a module.function name
-        TypeError: If sequence is not a list or Expression
+        AssertionError: If sequence is not a list
+        AssertionError: If function reference is invalid
+        TypeError: If function arguments are invalid
 
     Examples:
-        >>> evaluate(parse("(boolean.and True False)"))({})  # Function call
-        False
-        >>> evaluate(parse("(. boolean not True)"))({})      # Hy-style call
-        False
-        >>> evaluate(parse("(math.add (math.mul 2 3) 4)"))({})  # Nested call
-        10
+        >>> from genruler.modules import boolean
+        >>> evaluate(['boolean.tautology'])()
+        True
+
+        >>> evaluate(['boolean.and', ['boolean.tautology'], ['boolean.tautology']])()
+        True
 
         # These will raise errors:
         >>> evaluate(parse("True"))  # ValueError: not wrapped in parentheses
         >>> evaluate(parse("(invalid_symbol)"))  # AssertionError: no module.function
-        >>> evaluate("not a sequence")  # TypeError: must be list or Expression
+        >>> evaluate("not a sequence")  # TypeError: must be list
     """
-    assert isinstance(sequence, (list, Expression)), "sequence must be a list or Expression"
+    assert isinstance(sequence, list), "sequence must be a list"
     result = result or tuple()
     to_return = None
 
@@ -94,23 +77,6 @@ def evaluate(
                 result + (get_function(f"genruler.modules.{module}", function),),
             )
 
-        elif isinstance(sequence[0], Expression) and sequence[0][0] == Symbol("."):
-            to_return = evaluate(
-                sequence[1:],  # type: ignore
-                result
-                + (
-                    get_function(
-                        f"genruler.modules.{sequence[0][1]}", str(sequence[0][2])
-                    ),
-                ),
-            )
-
-        elif isinstance(sequence[0], Expression):
-            to_return = evaluate(
-                sequence[1:],  # type: ignore
-                result + (evaluate(sequence[0]),),
-            )
-
         elif isinstance(sequence[0], list):
             to_return = evaluate(
                 sequence[1:],  # type: ignore
@@ -120,7 +86,7 @@ def evaluate(
         else:
             to_return = evaluate(
                 sequence[1:],  # type: ignore
-                result + (extract(sequence[0]),),
+                result + (sequence[0],),
             )
 
     else:
@@ -130,18 +96,6 @@ def evaluate(
             to_return = result
 
     return to_return
-
-
-def extract(argument: type[Object]) -> Any:
-    match argument.__class__.__name__:
-        case String.__name__:
-            return str(argument)
-        case Integer.__name__:
-            return int(argument)
-        case Float.__name__:
-            return float(argument)
-        case _:
-            return argument
 
 
 def get_function(module_name: str, function_name: str) -> Callable[[Any], Any]:
