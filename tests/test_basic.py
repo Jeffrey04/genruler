@@ -4,6 +4,31 @@ from genruler.modules import basic
 
 
 class BasicTest(unittest.TestCase):
+    def test_coalesce(self):
+        context = {}
+        func = basic.coalesce(None, "hello world")
+        expected = "hello world"
+
+        result = func(context)
+        self.assertEqual(result, expected)
+
+        func = basic.coalesce("", "hello world")
+
+        result = func(context)
+        self.assertEqual(result, expected)
+
+        func = basic.coalesce("", None)
+        expected = None
+
+        result = func(context)
+        self.assertEqual(result, expected)
+
+        func = basic.coalesce(None, "")
+        expected = ""
+
+        result = func(context)
+        self.assertEqual(result, expected)
+
     def test_context(self):
         context = {"sub": {"foo": "bar"}}
         func = basic.context(basic.field("sub"), basic.field("foo"))

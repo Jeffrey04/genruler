@@ -4,7 +4,7 @@ from typing import Any
 import hy
 
 from .lexer import read
-from .library import evaluate, evaluate2
+from .library import evaluate
 
 
 def parse(input: str, use_hy: bool = True) -> Callable[[Any], Any]:
@@ -24,7 +24,7 @@ def parse(input: str, use_hy: bool = True) -> Callable[[Any], Any]:
     if use_hy:
         result = evaluate(hy.read(input))
     else:
-        result = evaluate2(read(input))
+        result = evaluate(read(input))
 
     assert callable(result)
     return result

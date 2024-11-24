@@ -1,4 +1,6 @@
+import ast
 from dataclasses import dataclass
+
 from funcparserlib.lexer import Token, make_tokenizer
 from funcparserlib.parser import NoParseError, Parser, forward_decl, many, some
 
@@ -15,7 +17,7 @@ class Symbol:
 
 def make_sexp_tokenizer():
     """Create a tokenizer for S-expressions.
-    
+
     Returns:
         A tuple of (tokenizer function, set of useless token types)
     """
@@ -34,9 +36,47 @@ def make_sexp_tokenizer():
     return make_tokenizer(specs), set(useless)
 
 
+def safe_literal_eval(token: Token) -> str | int | float | Symbol:
+    """Safely evaluate a token into a Python value.
+
+    Args:
+        token: The token to evaluate
+
+    Returns:
+        The evaluated value as the appropriate Python type:
+        - NUMBER tokens become int or float
+        - STRING tokens become str
+        - SYMBOL tokens become Symbol objects
+        - Other tokens return their value as is
+    """
+    match token.type:
+        case "NUMBER" | "STRING":
+            try:
+                return ast.literal_eval(token.value)
+            except (ValueError, SyntaxError):
+                # For strings, return the value as is if literal_eval fails
+                return token.value if token.type == "NUMBER" else token.value
+        case "SYMBOL":
+            return Symbol(token.value)
+        case _:
+            return token.value
+
+
+def make_token_parser(token_type: str):
+    """Create a parser for a specific token type.
+
+    Args:
+        token_type: The type of token to parse
+
+    Returns:
+        A parser that matches tokens of the specified type and returns their value
+    """
+    return some(lambda t: t.type == token_type) >> (lambda t: t.value)
+
+
 def make_parser() -> Parser:
     """Create a parser for S-expressions.
-    
+
     Returns:
         A parser that converts tokens into an AST
     """
@@ -44,24 +84,13 @@ def make_parser() -> Parser:
     expr = forward_decl()
 
     # Basic parsers for each token type
-    def make_token_parser(token_type: str):
-        return some(lambda t: t.type == token_type) >> (lambda t: t.value)
-
     lparen = make_token_parser("LPAREN")
     rparen = make_token_parser("RPAREN")
 
-    # Convert numbers to actual Python numbers
-    number = some(lambda t: t.type == "NUMBER") >> (
-        lambda t: float(t.value) if "." in t.value else int(t.value)
-    )
-
-    # Remove quotes from strings
-    string = some(lambda t: t.type == "STRING") >> (
-        lambda t: t.value[1:-1]
-    )  # Remove surrounding quotes
-
-    # Convert symbols to Symbol objects
-    symbol = some(lambda t: t.type == "SYMBOL") >> (lambda t: Symbol(t.value))
+    # Convert tokens to Python values
+    number = some(lambda t: t.type == "NUMBER") >> safe_literal_eval
+    string = some(lambda t: t.type == "STRING") >> safe_literal_eval
+    symbol = some(lambda t: t.type == "SYMBOL") >> safe_literal_eval
 
     # Atom can be number, string, or symbol
     atom = number | string | symbol
@@ -82,13 +111,13 @@ def make_parser() -> Parser:
 
 def read(input: str) -> list:
     """Read an S-expression string into an AST.
-    
+
     Args:
         input: The S-expression string to parse
-        
+
     Returns:
         The parsed AST
-        
+
     Raises:
         ValueError: If the input cannot be parsed
     """
