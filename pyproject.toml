@@ -7,8 +7,7 @@ readme = "README.md"
 packages = [{include = "genruler", from = "src"}]
 
 [tool.poetry.dependencies]
-python = ">=3.12, <3.14"
-hy = "^1.0.0"
+python = "^3.12"
 funcparserlib = "^1.0.1"
 
 
