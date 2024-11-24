@@ -2,6 +2,7 @@ import importlib
 from collections.abc import Callable
 from typing import Any, List
 
+from .exceptions import InvalidFunctionNameError
 from .lexer import Symbol as genSymbol
 
 
@@ -47,30 +48,20 @@ def evaluate(sequence: List[Any], result=None) -> tuple[Any] | Callable[[Any], A
         Either a callable function or a tuple of values
 
     Raises:
-        AssertionError: If sequence is not a list
-        AssertionError: If function reference is invalid
+        TypeError: If sequence is not a list
+        InvalidFunctionNameError: If function reference is invalid
         TypeError: If function arguments are invalid
-
-    Examples:
-        >>> from genruler.modules import boolean
-        >>> evaluate(['boolean.tautology'])()
-        True
-
-        >>> evaluate(['boolean.and', ['boolean.tautology'], ['boolean.tautology']])()
-        True
-
-        # These will raise errors:
-        >>> evaluate(parse("True"))  # ValueError: not wrapped in parentheses
-        >>> evaluate(parse("(invalid_symbol)"))  # AssertionError: no module.function
-        >>> evaluate("not a sequence")  # TypeError: must be list
     """
-    assert isinstance(sequence, list), "sequence must be a list"
+    if not isinstance(sequence, list):
+        raise TypeError("sequence must be a list")
+
     result = result or tuple()
     to_return = None
 
     if len(sequence) > 0:
         if isinstance(sequence[0], genSymbol):
-            assert "." in sequence[0].name
+            if "." not in sequence[0].name:
+                raise InvalidFunctionNameError(sequence[0].name)
             module, function = sequence[0].name.split(".")
             to_return = evaluate(
                 sequence[1:],  # type: ignore

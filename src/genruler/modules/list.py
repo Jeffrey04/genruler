@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from python_ruler.library import compute
+from genruler.library import compute
 
 
 def length[T](argument: Callable[[T], list] | list) -> Callable[[T], int]:

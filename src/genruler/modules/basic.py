@@ -1,8 +1,10 @@
 from functools import reduce
 from operator import itemgetter
-from typing import Any
+from typing import Any, TypeVar
 
 from genruler.library import compute
+
+T = TypeVar("T")
 
 
 class coalesce:
@@ -143,7 +145,7 @@ class field:
             return itemgetter(compute(self.key, context))(context)
 
 
-class value[T]:
+class value:
     """Hold a constant value that ignores context.
 
     A simple wrapper that returns the same value regardless of context.
@@ -151,16 +153,22 @@ class value[T]:
 
     Attributes:
         value: The constant value to return
-    """
 
-    value: T
+    Raises:
+        ValueError: If the value is a sub-rule
+    """
 
     def __init__(self, value: T) -> None:
         """Initialize with a constant value.
 
         Args:
             value: The value to return on every call
+
+        Raises:
+            ValueError: If the value is a sub-rule
         """
+        if callable(value):
+            raise ValueError("basic.value cannot accept sub-rules")
         self.value = value
 
     def __call__(self, _: Any) -> T:

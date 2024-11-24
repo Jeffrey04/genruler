@@ -87,8 +87,19 @@ class BasicTest(unittest.TestCase):
 
     def test_value(self):
         context = {}
-        func = basic.value("Foo")
-        expected = "Foo"
 
-        result = func(context)
-        self.assertEqual(result, expected)
+        # Test literal values
+        func = basic.value(42)
+        self.assertEqual(func(context), 42)
+
+        func = basic.value("active")
+        self.assertEqual(func(context), "active")
+
+        # Test tuple values
+        func = basic.value(("a", "b", "c"))
+        self.assertEqual(func(context), ("a", "b", "c"))
+
+        # Test invalid sub-rule
+        with self.assertRaises(ValueError) as exc_info:
+            basic.value(basic.field("status"))
+        self.assertIn("basic.value cannot accept sub-rules", str(exc_info.exception))

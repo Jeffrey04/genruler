@@ -12,10 +12,11 @@ A rule DSL language parser in Python that allows you to write and evaluate rules
 - [Ruler DSL](#ruler-dsl)
   - [Syntax & Structure](#syntax--structure)
 - [API Reference](#ruler-api-overview)
-  - [Array Functions](#array-functions)
   - [Basic Functions](#basic-functions)
   - [Boolean Operators](#boolean-operators)
   - [Condition Rules](#condition-rules)
+  - [String Functions](#string-functions)
+  - [List Functions](#list-functions)
 - [Error Handling](#error-handling)
 - [Contributing](#contributing)
 - [License](#license)
@@ -51,7 +52,8 @@ pip install -e .
 
 ## Requirements
 
-- Python 3.12 or higher (less than 3.14)
+- Python 3.12 or higher
+- funcparserlib >= 1.0.1
 
 ## Ruler DSL
 
@@ -86,111 +88,276 @@ rule(context) // should return true
 
 ## Ruler API overview
 
-### Array functions
+### Basic Functions
 
-Some array related functions.
+Functions for basic operations like field access and value handling.
 
-#### array.length
+#### basic.coalesce
 
 ```
-(array.length $argument)
+(basic.coalesce $value $arg1 $arg2 ...)
 ```
 
-Returns the length of a given array `$argument`. For example,
+Returns the first non-empty (truthy) value from a sequence of values. Similar to SQL's COALESCE function. Arguments are evaluated in order until a truthy value is found.
 
+Examples:
 ```python
-import genruler
+# Returns "value" since it's the first truthy value
+rule = genruler.parse('(basic.coalesce "" "value" "other")')
+context = {}
+result = rule(context)  # Returns "value"
 
-rule = genruler.parse('(array.length (basic.Field "fieldA"))')
-context = {"fieldA": [1, 2, 3]}
-rule(context) // should return 3
+# Works with nested expressions
+rule = genruler.parse('(basic.coalesce (basic.field "a") (basic.field "b") "default")')
+context = {"b": "value", "a": None}
+result = rule(context)  # Returns "value"
 ```
-
-### Basic functions
-
-Some random functions that don't fit anywhere else goes here
 
 #### basic.context
 
 ```
-(basic.context $context_sub, $rule)
+(basic.context $context_sub $argument)
 ```
 
-Temporarily change the context to `$context_sub`, and perform `$rule` with `$context_sub` as the new `context`
+Access nested context values by evaluating a sub-context expression and then evaluating an argument within that sub-context.
 
-- `$context_sub` _(required)_: A struct, or a rule to extract a new struct w.r.t. the original `context`
-- `$rule` _(required)_: the rule to be applied w.r.t. `$context_sub`
-
-An example:
-
+Examples:
 ```python
-rule = ruler.parse('(basic.Context (basic.field, 'sub')
-                                   (basic.field, 'foo'))')
+# Access nested object
+rule = genruler.parse('(basic.context (basic.field "user") (basic.field "name"))')
+context = {"user": {"name": "John"}}
+result = rule(context)  # Returns "John"
 
-context = {"sub": {"foo": "bar"}}
-rule(context) # returns context['sub']['foo'], which is 'bar'
+# Multiple levels of nesting
+rule = genruler.parse('(basic.context (basic.field "data") (basic.context (basic.field "user") (basic.field "email")))')
+context = {"data": {"user": {"email": "john@example.com"}}}
+result = rule(context)  # Returns "john@example.com"
 ```
 
-#### Basic.field
+#### basic.field
 
 ```
-(basic.field $key $default)
+(basic.field $key [$default])
 ```
 
-Returns a field value from `context` when called.
+Access field values from a dictionary or list context. For dictionaries, supports optional default values for missing keys. For lists, uses direct index access.
 
-- `$key` _(required)_: is a `key` in the `context`.
-- `$default` _(optional)_: is a default value to be returned when `context[key]` does not exist.
+Examples:
+```python
+# Dictionary access
+rule = genruler.parse('(basic.field "name")')
+context = {"name": "John"}
+result = rule(context)  # Returns "John"
+
+# With default value
+rule = genruler.parse('(basic.field "age" 0)')
+context = {}
+result = rule(context)  # Returns 0
+
+# List access
+rule = genruler.parse('(basic.field 0)')
+context = ["first", "second"]
+result = rule(context)  # Returns "first"
+```
 
 #### basic.value
 
+Creates a constant value that is returned as-is, ignoring the context. Useful for comparing fields against fixed values:
+- Only accepts literal values (numbers, strings)
+- List syntax produces tuples: `("a" "b")` -> `("a", "b")`
+- Cannot contain sub-rules (will raise an error)
+
+Examples:
+```python
+# Simple constant values
+rule = genruler.parse('(basic.value 42)')
+result = rule({})  # Returns 42
+
+rule = genruler.parse('(basic.value "active")')
+result = rule({})  # Returns "active"
+
+rule = genruler.parse('(basic.value ("a" "b" "c"))')
+result = rule({})  # Returns ("a", "b", "c")
+
+# Sub-rules are not allowed
+rule = genruler.parse('(basic.value (basic.field "status"))')  # ValueError: basic.value cannot accept sub-rules
+
+# Use basic.value for constant comparisons
+rule = genruler.parse('(condition.equal (basic.field "status") (basic.value "active"))')
+result = rule({"status": "active"})  # Returns True
 ```
-(basic.value $value)
+
+#### number.add
+
+```
+(number.add $value1 $value2 ...)
 ```
 
-Returns a value, regardless what is in the `context`
+Adds multiple numbers together. Values are evaluated in the context before addition.
 
-- `$value` _(required)_: a value to return. **MAY NOT** be a sub-rule
+Examples:
+```python
+# Simple addition
+rule = genruler.parse('(number.add 1 2 3)')
+context = {}
+result = rule(context)  # Returns 6
 
-### Boolean operators
+# With field values
+rule = genruler.parse('(number.add (basic.field "price") (basic.field "tax"))')
+context = {"price": 100, "tax": 20}
+result = rule(context)  # Returns 120
+```
 
-Usually used to chain condition rules (see next section) together
+#### number.subtract
+
+```
+(number.subtract $value1 $value2)
+```
+
+Subtracts the second value from the first value. Values are evaluated in the context before subtraction.
+
+Examples:
+```python
+# Simple subtraction
+rule = genruler.parse('(number.subtract 10 3)')
+context = {}
+result = rule(context)  # Returns 7
+
+# With field values
+rule = genruler.parse('(number.subtract (basic.field "total") (basic.field "discount"))')
+context = {"total": 100, "discount": 20}
+result = rule(context)  # Returns 80
+```
+
+#### number.multiply
+
+```
+(number.multiply $value1 $value2 ...)
+```
+
+Multiplies multiple numbers together. Values are evaluated in the context before multiplication.
+
+Examples:
+```python
+# Simple multiplication
+rule = genruler.parse('(number.multiply 2 3 4)')
+context = {}
+result = rule(context)  # Returns 24
+
+# With field values
+rule = genruler.parse('(number.multiply (basic.field "quantity") (basic.field "price"))')
+context = {"quantity": 5, "price": 10}
+result = rule(context)  # Returns 50
+```
+
+#### number.divide
+
+```
+(number.divide $value1 $value2)
+```
+
+Divides the first value by the second value. Values are evaluated in the context before division.
+
+Examples:
+```python
+# Simple division
+rule = genruler.parse('(number.divide 10 2)')
+context = {}
+result = rule(context)  # Returns 5.0
+
+# With field values
+rule = genruler.parse('(number.divide (basic.field "total") (basic.field "parts"))')
+context = {"total": 100, "parts": 4}
+result = rule(context)  # Returns 25.0
+```
+
+#### number.modulo
+
+```
+(number.modulo $value1 $value2)
+```
+
+Computes the remainder when dividing the first value by the second value. Values are evaluated in the context before the modulo operation.
+
+Examples:
+```python
+# Simple modulo
+rule = genruler.parse('(number.modulo 7 3)')
+context = {}
+result = rule(context)  # Returns 1
+
+# With field values
+rule = genruler.parse('(number.modulo (basic.field "items") (basic.field "per_page"))')
+context = {"items": 17, "per_page": 5}
+result = rule(context)  # Returns 2
+```
+
+### Boolean Operators
+
+Functions for logical operations.
 
 #### boolean.and
 
 ```
-(boolean.and $argument1 $argument2 ...)
+(boolean.and $value1 $value2 ...)
 ```
 
-Returns `True` if all arguments returns `True`, or `False` otherwise.
+Performs a logical AND operation on all values. Values are evaluated in the context before the operation. Returns True only if all values are True.
 
-#### boolean.contradiction
+Examples:
+```python
+# Simple AND operation
+rule = genruler.parse('(boolean.and (condition.gt (basic.field "age") 18) (condition.equal (basic.field "verified") (boolean.tautology)))')
+context = {"age": 21, "verified": True}
+result = rule(context)  # Returns True
+
+# Multiple conditions
+rule = genruler.parse('(boolean.and (basic.field "active") (basic.field "paid") (basic.field "verified"))')
+context = {"active": True, "paid": True, "verified": True}
+result = rule(context)  # Returns True
+```
+
+#### boolean.or
 
 ```
-(boolean.contradiction)
+(boolean.or $value1 $value2 ...)
 ```
 
-Always returns a `False`, a shorthand for
+Performs a logical OR operation on all values. Values are evaluated in the context before the operation. Returns True if any value is True.
 
-```
-(basic.Value false)
+Examples:
+```python
+# Check multiple conditions
+rule = genruler.parse('(boolean.or (condition.equal (basic.field "role") "admin") (condition.equal (basic.field "role") "moderator"))')
+context = {"role": "admin"}
+result = rule(context)  # Returns True
+
+# With field values
+rule = genruler.parse('(boolean.or (basic.field "premium") (basic.field "trial"))')
+context = {"premium": False, "trial": True}
+result = rule(context)  # Returns True
 ```
 
 #### boolean.not
 
 ```
-(boolean.not $argument)
+(boolean.not $value)
 ```
 
-Returns the result of negation done to `$argument`.
+Performs a logical NOT operation on the value. The value is evaluated in the context before the operation.
 
-#### boolean.or
+Examples:
+```python
+# Negate a condition
+rule = genruler.parse('(boolean.not (condition.equal (basic.field "status") "blocked"))')
+context = {"status": "active"}
+result = rule(context)  # Returns True
 
+# Negate a field value
+rule = genruler.parse('(boolean.not (basic.field "disabled"))')
+context = {"disabled": False}
+result = rule(context)  # Returns True
 ```
-(boolean.or $argument2 $argument2)
-```
-
-Returns `True` if any of the arguments is `True`, or `False` otherwise.
 
 #### boolean.tautology
 
@@ -198,101 +365,285 @@ Returns `True` if any of the arguments is `True`, or `False` otherwise.
 (boolean.tautology)
 ```
 
-Returns `True` regardless
+Always returns True, regardless of the context. Useful as a default condition or in complex logical expressions.
 
-### Condition rules
+Examples:
+```python
+# Simple tautology
+rule = genruler.parse('(boolean.tautology)')
+context = {}
+result = rule(context)  # Returns True
 
-Usually returns either true or false
+# In combination with AND
+rule = genruler.parse('(boolean.and (boolean.tautology) (condition.equal (basic.field "valid") true))')
+context = {"valid": true}
+result = rule(context)  # Same as just checking valid=true
+```
+
+#### boolean.contradiction
+
+```
+(boolean.contradiction)
+```
+
+Always returns False, regardless of the context. Useful as a default condition or in complex logical expressions.
+
+Examples:
+```python
+# Simple contradiction
+rule = genruler.parse('(boolean.contradiction)')
+context = {}
+result = rule(context)  # Returns False
+
+# In combination with OR
+rule = genruler.parse('(boolean.or (boolean.contradiction) (condition.equal (basic.field "valid") true))')
+context = {"valid": true}
+result = rule(context)  # Same as just checking valid=true
+```
+
+### Condition Rules
+
+Functions for comparing values and checking conditions.
 
 #### condition.equal
 
 ```
-(condition.equal $alpha $beta)
+(condition.equal $value1 $value2)
 ```
 
-Returns `True` if and only if `$alpha` is equivalent to `$beta`.
+Compares two values for equality. Values are evaluated in the context before comparison.
 
-#### condition.gt
+Examples:
+```python
+# Compare field with constant
+rule = genruler.parse('(condition.equal (basic.field "name") "John")')
+context = {"name": "John"}
+result = rule(context)  # Returns True
 
+# Compare two fields
+rule = genruler.parse('(condition.equal (basic.field "password") (basic.field "confirm"))')
+context = {"password": "secret", "confirm": "secret"}
+result = rule(context)  # Returns True
 ```
-(condition.gt $alpha $beta)
-```
-
-Returns `True` if and only if `$alpha` is greater than `$beta`.
-
-#### condition.ge
-
-```
-(condition.ge $alpha $beta)
-```
-
-Returns `True` if and only if `$alpha` is greater than or equal to `$beta`.
 
 #### condition.in
 
 ```
-(condition.in $alpha $values)
+(condition.in $value $list)
 ```
 
-Returns `True` if `$alpha` is in `$values`
+Checks if a value is contained in a list. The value and list are evaluated in the context before checking.
+
+Examples:
+```python
+# Check against constant list
+rule = genruler.parse('(condition.in (basic.value "apple") (basic.value ("apple" "banana" "orange")))')
+context = {}
+result = rule(context)  # Returns True
+
+# Check field value against list field
+rule = genruler.parse('(condition.in (basic.field "fruit") (basic.field "allowed"))')
+context = {"fruit": "apple", "allowed": ["apple", "banana"]}
+result = rule(context)  # Returns True
+```
 
 #### condition.is_none
 
 ```
-(condition.is_none $alpha)
+(condition.is_none $value)
 ```
 
-Returns `True` if `$alpha` is `None`
+Checks if a value is None. The value is evaluated in the context before checking.
+
+Examples:
+```python
+# Check if field is None
+rule = genruler.parse('(condition.is_none (basic.field "optional"))')
+context = {"optional": None}
+result = rule(context)  # Returns True
+
+# Check with nested expression
+rule = genruler.parse('(condition.is_none (basic.field "user.email"))')
+context = {"user": {"email": None}}
+result = rule(context)  # Returns True
+```
 
 #### condition.is_true
 
 ```
-(condition.Is_True $alpha)
+(condition.is_true $value)
 ```
 
-Returns `True` if `$alpha` is `True`
+Checks if a value is exactly True (not just truthy). The value is evaluated in the context before checking.
 
-#### condition.lt
+Examples:
+```python
+# Check boolean field
+rule = genruler.parse('(condition.is_true (basic.field "active"))')
+context = {"active": True}
+result = rule(context)  # Returns True
+
+# Non-True values return False
+rule = genruler.parse('(condition.is_true (basic.field "count"))')
+context = {"count": 1}  # Even though 1 is truthy, it's not True
+result = rule(context)  # Returns False
+```
+
+#### condition.gt (Greater Than)
 
 ```
-(condition.less_than $alpha $beta)
+(condition.gt $value1 $value2)
 ```
 
-Returns `True` if and only if `$alpha` is less than `$beta`.
+Checks if the first value is greater than the second value. Values are evaluated in the context before comparison.
 
-#### condition.le
+Examples:
+```python
+# Compare numbers
+rule = genruler.parse('(condition.gt (basic.field "age") 18)')
+context = {"age": 21}
+result = rule(context)  # Returns True
+
+# Compare field values
+rule = genruler.parse('(condition.gt (basic.field "score") (basic.field "threshold"))')
+context = {"score": 85, "threshold": 70}
+result = rule(context)  # Returns True
+```
+
+#### condition.ge (Greater Than or Equal)
 
 ```
-["condition.Less_Than_Equal", $alpha, $beta]
+(condition.ge $value1 $value2)
 ```
 
-Returns `True` if and only if `$alpha` is less than or equal to `$beta`.
+Checks if the first value is greater than or equal to the second value. Values are evaluated in the context before comparison.
 
-### String operations
+Examples:
+```python
+# Compare numbers
+rule = genruler.parse('(condition.ge (basic.field "age") 18)')
+context = {"age": 18}
+result = rule(context)  # Returns True
 
-Some basic string operations
+# Compare field values
+rule = genruler.parse('(condition.ge (basic.field "score") (basic.field "passing"))')
+context = {"score": 70, "passing": 70}
+result = rule(context)  # Returns True
+```
+
+#### condition.lt (Less Than)
+
+```
+(condition.lt $value1 $value2)
+```
+
+Checks if the first value is less than the second value. Values are evaluated in the context before comparison.
+
+Examples:
+```python
+# Compare numbers
+rule = genruler.parse('(condition.lt (basic.field "age") 18)')
+context = {"age": 17}
+result = rule(context)  # Returns True
+
+# Compare field values
+rule = genruler.parse('(condition.lt (basic.field "score") (basic.field "threshold"))')
+context = {"score": 60, "threshold": 70}
+result = rule(context)  # Returns True
+```
+
+#### condition.le (Less Than or Equal)
+
+```
+(condition.le $value1 $value2)
+```
+
+Checks if the first value is less than or equal to the second value. Values are evaluated in the context before comparison.
+
+Examples:
+```python
+# Compare numbers
+rule = genruler.parse('(condition.le (basic.field "age") 18)')
+context = {"age": 18}
+result = rule(context)  # Returns True
+
+# Compare field values
+rule = genruler.parse('(condition.le (basic.field "score") (basic.field "passing"))')
+context = {"score": 70, "passing": 70}
+result = rule(context)  # Returns True
+```
+
+### String Functions
+
+Functions for string manipulation and field access.
 
 #### string.concat
 
 ```
-(string.Concat $link $argument1 $argument2 ...)
+(string.concat $separator $value1 $value2 ...)
 ```
 
-Concatenate arguments by `$link`
+Joins multiple values into a single string using the specified separator. Each value is evaluated in the context and converted to a string before joining.
+
+Examples:
+```python
+# Join with comma separator
+rule = genruler.parse('(string.concat "," "a" "b" "c")')
+context = {}
+result = rule(context)  # Returns "a,b,c"
+
+# Join with space, using field values
+rule = genruler.parse('(string.concat " " (basic.field "first") (basic.field "last"))')
+context = {"first": "John", "last": "Doe"}
+result = rule(context)  # Returns "John Doe"
+```
 
 #### string.concat_fields
 
 ```
-(string.concat_fields $link $key1 $key2 ...)
+(string.concat_fields $separator $field1 $field2 ...)
 ```
 
-A short hand for
+Similar to `string.concat` but specifically for joining field values. Automatically retrieves and joins the values of specified fields from the context.
+
+Examples:
+```python
+# Join field values with comma
+rule = genruler.parse('(string.concat_fields "," "first" "last")')
+context = {"first": "John", "last": "Doe"}
+result = rule(context)  # Returns "John,Doe"
+
+# Join multiple fields with custom separator
+rule = genruler.parse('(string.concat_fields " - " "city" "state" "country")')
+context = {"city": "San Francisco", "state": "CA", "country": "USA"}
+result = rule(context)  # Returns "San Francisco - CA - USA"
+```
+
+#### string.field
 
 ```
-(string.concat $link (string.Field $key1) (string.field $key2) ...)
+(string.field $key [$default])
 ```
 
-Note: `$key1`, `$key2` etc.
+Retrieves a field value from the context and converts it to a string. Similar to `basic.field` but ensures the result is a string. Optionally accepts a default value if the field doesn't exist.
+
+Examples:
+```python
+# Basic string field access
+rule = genruler.parse('(string.field "name")')
+context = {"name": "John"}
+result = rule(context)  # Returns "John"
+
+# Numbers are converted to strings
+rule = genruler.parse('(string.field "age")')
+context = {"age": 25}
+result = rule(context)  # Returns "25"
+
+# With default value
+rule = genruler.parse('(string.field "missing" "N/A")')
+context = {}
+result = rule(context)  # Returns "N/A"
+```
 
 #### string.lower
 
@@ -300,26 +651,71 @@ Note: `$key1`, `$key2` etc.
 (string.lower $value)
 ```
 
-Change `$value` to lowercase
+Converts a value to lowercase. The value is first evaluated in the context and then converted to lowercase.
+
+Examples:
+```python
+# Simple lowercase conversion
+rule = genruler.parse('(string.lower "HELLO")')
+context = {}
+result = rule(context)  # Returns "hello"
+
+# Lowercase field value
+rule = genruler.parse('(string.lower (basic.field "name"))')
+context = {"name": "JOHN"}
+result = rule(context)  # Returns "john"
+```
+
+### List Functions
+
+Functions for working with lists and sequences.
+
+#### list.length
+
+```
+(list.length $list)
+```
+
+Returns the length of a list. The list argument is evaluated in the context before calculating the length.
+
+Examples:
+```python
+# Direct list length
+rule = genruler.parse('(list.length ["a", "b", "c"])')
+context = {}
+result = rule(context)  # Returns 3
+
+# Field list length
+rule = genruler.parse('(list.length (basic.field "items"))')
+context = {"items": [1, 2, 3, 4]}
+result = rule(context)  # Returns 4
+
+# Empty list
+rule = genruler.parse('(list.length (basic.field "empty"))')
+context = {"empty": []}
+result = rule(context)  # Returns 0
+```
 
 ## Error Handling
 
-When using ruler, you might encounter these common errors:
-
-1. Syntax Errors: Occur when the rule string is not properly formatted
-2. Context Key Errors: When accessing non-existent fields in the context
-3. Type Errors: When comparing incompatible types
-
-Example of handling errors:
+The library provides clear error messages for common issues:
 
 ```python
-try:
-    rule = genruler.parse('(condition.equal (basic.field "age") 25)')
-    result = rule({})  # Empty context
-except KeyError:
-    print("Field not found in context")
-except Exception as e:
-    print(f"An error occurred: {str(e)}")
+# Invalid function name
+rule = genruler.parse('(invalid_fn "value")')
+# InvalidFunctionNameError: Invalid function name 'invalid_fn'
+
+# Missing closing parenthesis
+rule = genruler.parse('(basic.field "name"')
+# ValueError: Parse error at position 20
+
+# Missing field in context
+rule = genruler.parse('(basic.field "age")')
+rule({})  # KeyError: 'age'
+
+# Invalid sub-rule in basic.value
+rule = genruler.parse('(basic.value (basic.field "status"))')
+# ValueError: basic.value cannot accept sub-rules
 ```
 
 ## Contributing

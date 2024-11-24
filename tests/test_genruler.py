@@ -1,6 +1,7 @@
 import pytest
 
 import genruler as ruler
+from genruler.exceptions import InvalidFunctionNameError
 from genruler.modules import basic, boolean, condition, number, string
 
 
@@ -40,8 +41,9 @@ def test_parse():
 
     non_rule = '(and "foo" "bar")'
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(InvalidFunctionNameError) as excinfo:
         result = ruler.parse(non_rule)
+    assert "must be in format 'module.function'" in str(excinfo.value)
 
     rule = "(basic.value)"
 
