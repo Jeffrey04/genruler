@@ -3,23 +3,28 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
-A rule DSL language parser in Python that allows you to write and evaluate rules using a LISP-inspired syntax.
-
 ## Table of Contents
+- [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
-- [Requirements](#requirements)
+  - [Requirements](#requirements)
 - [Ruler DSL](#ruler-dsl)
   - [Syntax & Structure](#syntax--structure)
-- [API Reference](#ruler-api-overview)
+  - [Parsing and Evaluation](#parsing-and-evaluation)
+- [API Reference](#api-reference)
   - [Basic Functions](#basic-functions)
+  - [Number Functions](#number-functions)
   - [Boolean Operators](#boolean-operators)
-  - [Condition Rules](#condition-rules)
   - [String Functions](#string-functions)
+  - [Condition Rules](#condition-rules)
   - [List Functions](#list-functions)
 - [Error Handling](#error-handling)
 - [Contributing](#contributing)
 - [License](#license)
+
+## Overview
+
+A rule DSL language parser in Python that allows you to write and evaluate rules using a LISP-inspired syntax.
 
 ## Quick Start
 
@@ -50,7 +55,7 @@ cd genruler
 pip install -e .
 ```
 
-## Requirements
+### Requirements
 
 - Python 3.12 or higher
 - funcparserlib >= 1.0.1
@@ -74,7 +79,7 @@ Unless otherwise specified, **a rule can be inserted as an argument to another r
               condition.equal (basic.field "fieldB") "Y")
 ```
 
-## Parsing and computing result
+### Parsing and Evaluation
 
 In order to parse the rule, just call `genruler.parse`. The result is a function where you can put in a context object in order for it to compute a result.
 
@@ -86,7 +91,7 @@ context = {"fieldA": "X"}
 rule(context) // should return true
 ```
 
-## Ruler API overview
+## API Reference
 
 ### Basic Functions
 
@@ -186,6 +191,10 @@ rule = genruler.parse('(basic.value (basic.field "status"))')  # ValueError: bas
 rule = genruler.parse('(condition.equal (basic.field "status") (basic.value "active"))')
 result = rule({"status": "active"})  # Returns True
 ```
+
+### Number Functions
+
+Functions for numeric operations.
 
 #### number.add
 
@@ -401,6 +410,99 @@ context = {"valid": true}
 result = rule(context)  # Same as just checking valid=true
 ```
 
+### String Functions
+
+Functions for string manipulation and field access.
+
+#### string.concat
+
+```
+(string.concat $separator $value1 $value2 ...)
+```
+
+Joins multiple values into a single string using the specified separator. Each value is evaluated in the context and converted to a string before joining.
+
+Examples:
+```python
+# Join with comma separator
+rule = genruler.parse('(string.concat "," "a" "b" "c")')
+context = {}
+result = rule(context)  # Returns "a,b,c"
+
+# Join with space, using field values
+rule = genruler.parse('(string.concat " " (basic.field "first") (basic.field "last"))')
+context = {"first": "John", "last": "Doe"}
+result = rule(context)  # Returns "John Doe"
+```
+
+#### string.concat_fields
+
+```
+(string.concat_fields $separator $field1 $field2 ...)
+```
+
+Similar to `string.concat` but specifically for joining field values. Automatically retrieves and joins the values of specified fields from the context.
+
+Examples:
+```python
+# Join field values with comma
+rule = genruler.parse('(string.concat_fields "," "first" "last")')
+context = {"first": "John", "last": "Doe"}
+result = rule(context)  # Returns "John,Doe"
+
+# Join multiple fields with custom separator
+rule = genruler.parse('(string.concat_fields " - " "city" "state" "country")')
+context = {"city": "San Francisco", "state": "CA", "country": "USA"}
+result = rule(context)  # Returns "San Francisco - CA - USA"
+```
+
+#### string.field
+
+```
+(string.field $key [$default])
+```
+
+Retrieves a field value from the context and converts it to a string. Similar to `basic.field` but ensures the result is a string. Optionally accepts a default value if the field doesn't exist.
+
+Examples:
+```python
+# Basic string field access
+rule = genruler.parse('(string.field "name")')
+context = {"name": "John"}
+result = rule(context)  # Returns "John"
+
+# Numbers are converted to strings
+rule = genruler.parse('(string.field "age")')
+context = {"age": 25}
+result = rule(context)  # Returns "25"
+
+# With default value
+rule = genruler.parse('(string.field "missing" "N/A")')
+context = {}
+result = rule(context)  # Returns "N/A"
+```
+
+#### string.lower
+
+```
+(string.lower $value)
+```
+
+Converts a value to lowercase. The value is first evaluated in the context and then converted to lowercase.
+
+Examples:
+```python
+# Simple lowercase conversion
+rule = genruler.parse('(string.lower "HELLO")')
+context = {}
+result = rule(context)  # Returns "hello"
+
+# Lowercase field value
+rule = genruler.parse('(string.lower (basic.field "name"))')
+context = {"name": "JOHN"}
+result = rule(context)  # Returns "john"
+```
+
 ### Condition Rules
 
 Functions for comparing values and checking conditions.
@@ -463,7 +565,7 @@ context = {"optional": None}
 result = rule(context)  # Returns True
 
 # Check with nested expression
-rule = genruler.parse('(condition.is_none (basic.field "user.email"))')
+rule = genruler.parse('(basic.context (basic.field "user") (condition.is_none (basic.field "email")))')
 context = {"user": {"email": None}}
 result = rule(context)  # Returns True
 ```
@@ -571,99 +673,6 @@ result = rule(context)  # Returns True
 rule = genruler.parse('(condition.le (basic.field "score") (basic.field "passing"))')
 context = {"score": 70, "passing": 70}
 result = rule(context)  # Returns True
-```
-
-### String Functions
-
-Functions for string manipulation and field access.
-
-#### string.concat
-
-```
-(string.concat $separator $value1 $value2 ...)
-```
-
-Joins multiple values into a single string using the specified separator. Each value is evaluated in the context and converted to a string before joining.
-
-Examples:
-```python
-# Join with comma separator
-rule = genruler.parse('(string.concat "," "a" "b" "c")')
-context = {}
-result = rule(context)  # Returns "a,b,c"
-
-# Join with space, using field values
-rule = genruler.parse('(string.concat " " (basic.field "first") (basic.field "last"))')
-context = {"first": "John", "last": "Doe"}
-result = rule(context)  # Returns "John Doe"
-```
-
-#### string.concat_fields
-
-```
-(string.concat_fields $separator $field1 $field2 ...)
-```
-
-Similar to `string.concat` but specifically for joining field values. Automatically retrieves and joins the values of specified fields from the context.
-
-Examples:
-```python
-# Join field values with comma
-rule = genruler.parse('(string.concat_fields "," "first" "last")')
-context = {"first": "John", "last": "Doe"}
-result = rule(context)  # Returns "John,Doe"
-
-# Join multiple fields with custom separator
-rule = genruler.parse('(string.concat_fields " - " "city" "state" "country")')
-context = {"city": "San Francisco", "state": "CA", "country": "USA"}
-result = rule(context)  # Returns "San Francisco - CA - USA"
-```
-
-#### string.field
-
-```
-(string.field $key [$default])
-```
-
-Retrieves a field value from the context and converts it to a string. Similar to `basic.field` but ensures the result is a string. Optionally accepts a default value if the field doesn't exist.
-
-Examples:
-```python
-# Basic string field access
-rule = genruler.parse('(string.field "name")')
-context = {"name": "John"}
-result = rule(context)  # Returns "John"
-
-# Numbers are converted to strings
-rule = genruler.parse('(string.field "age")')
-context = {"age": 25}
-result = rule(context)  # Returns "25"
-
-# With default value
-rule = genruler.parse('(string.field "missing" "N/A")')
-context = {}
-result = rule(context)  # Returns "N/A"
-```
-
-#### string.lower
-
-```
-(string.lower $value)
-```
-
-Converts a value to lowercase. The value is first evaluated in the context and then converted to lowercase.
-
-Examples:
-```python
-# Simple lowercase conversion
-rule = genruler.parse('(string.lower "HELLO")')
-context = {}
-result = rule(context)  # Returns "hello"
-
-# Lowercase field value
-rule = genruler.parse('(string.lower (basic.field "name"))')
-context = {"name": "JOHN"}
-result = rule(context)  # Returns "john"
 ```
 
 ### List Functions
