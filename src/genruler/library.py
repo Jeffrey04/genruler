@@ -1,5 +1,6 @@
 import importlib
 from collections.abc import Callable
+from types import ModuleType
 from typing import Any, List
 
 from .exceptions import InvalidFunctionNameError
@@ -34,23 +35,38 @@ def compute[T, U, V](argument: Callable[[T], U] | V, context: T) -> U | V:
     )
 
 
-def evaluate(sequence: List[Any], result=None) -> tuple[Any] | Callable[[Any], Any]:
+def evaluate(
+    sequence: List[Any], env: ModuleType | None, result=None
+) -> tuple[Any] | Callable[[Any], Any]:
     """Evaluate an S-expression sequence into a callable or value.
 
-    This function recursively evaluates S-expressions, handling function calls
-    in the form: (module.function arg1 arg2)
+    This function recursively evaluates S-expressions into either a callable function
+    or a tuple of values. It supports three types of expressions:
+    1. Function calls: (module.function arg1 arg2)
+    2. Nested expressions: ((inner_expr) arg1 arg2)
+    3. Value sequences: (1 2 3 4)
+
+    Function calls can use either:
+    - Built-in genruler functions (e.g., "number.add")
+    - Custom functions from the provided env module (e.g., "custom_func")
 
     Args:
-        sequence: A list representing an S-expression
-        result: Internal accumulator for recursive evaluation
+        sequence: A list representing an S-expression to evaluate
+        env: Optional module containing custom functions that can be referenced
+            by name without a module prefix
+        result: Internal accumulator for recursive evaluation, should not be
+            provided by external callers
 
     Returns:
-        Either a callable function or a tuple of values
+        - If the first element is a function: the result of calling that function
+          with the evaluated remaining elements
+        - Otherwise: a tuple containing all evaluated elements
 
     Raises:
         TypeError: If sequence is not a list
-        InvalidFunctionNameError: If function reference is invalid
-        TypeError: If function arguments are invalid
+        InvalidFunctionNameError: If a function reference is invalid or not found
+            in either genruler's modules or the provided env
+        TypeError: If function arguments are invalid for the called function
     """
     if not isinstance(sequence, list):
         raise TypeError("sequence must be a list")
@@ -60,23 +76,29 @@ def evaluate(sequence: List[Any], result=None) -> tuple[Any] | Callable[[Any], A
 
     if len(sequence) > 0:
         if isinstance(sequence[0], genSymbol):
-            if "." not in sequence[0].name:
-                raise InvalidFunctionNameError(sequence[0].name)
-            module, function = sequence[0].name.split(".")
+            closure = (
+                get_function(sequence[0].name, env)
+                if "." not in sequence[0].name
+                else get_genruler_function(*sequence[0].name.split("."))
+            )
+
             to_return = evaluate(
                 sequence[1:],  # type: ignore
-                result + (get_function(f"genruler.modules.{module}", function),),
+                env,
+                result + (closure,),
             )
 
         elif isinstance(sequence[0], list):
             to_return = evaluate(
                 sequence[1:],  # type: ignore
-                result + (evaluate(sequence[0]),),
+                env,
+                result + (evaluate(sequence[0], env),),
             )
 
         else:
             to_return = evaluate(
                 sequence[1:],  # type: ignore
+                env,
                 result + (sequence[0],),
             )
 
@@ -89,9 +111,18 @@ def evaluate(sequence: List[Any], result=None) -> tuple[Any] | Callable[[Any], A
     return to_return
 
 
-def get_function(module_name: str, function_name: str) -> Callable[[Any], Any]:
+def get_function(function_name: str, env: ModuleType | None):
+    try:
+        assert env
+
+        return getattr(env, function_name)
+    except (AttributeError, AssertionError) as e:
+        raise InvalidFunctionNameError(function_name) from e
+
+
+def get_genruler_function(module_name: str, function_name: str) -> Callable[[Any], Any]:
     """Get a function from a module by name."""
-    module = importlib.import_module(module_name)
+    module = importlib.import_module(f"genruler.modules.{module_name}")
 
     try:
         function = getattr(module, function_name)

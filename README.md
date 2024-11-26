@@ -18,6 +18,7 @@
   - [String Functions](#string-functions)
   - [Condition Rules](#condition-rules)
   - [List Functions](#list-functions)
+- [Extending GenRuler](#extending-genruler)
 - [Error Handling](#error-handling)
 - [Contributing](#contributing)
 - [License](#license)
@@ -704,6 +705,30 @@ rule = genruler.parse('(list.length (basic.field "empty"))')
 context = {"empty": []}
 result = rule(context)  # Returns 0
 ```
+
+## Extending GenRuler
+
+GenRuler can be extended with custom functions through the `env` parameter in the `parse` function. This allows you to add domain-specific functionality without modifying the core library.
+
+```python
+from genruler.library import compute
+from genruler.modules import basic
+
+class CustomModule:
+    @staticmethod
+    def greet():
+        return lambda ctx: f"Hello, {compute(basic.field('name', 'World'))}!"
+
+# Use custom functions in rules
+rule = genruler.parse("(greet)", env=CustomModule)
+result = rule({"name": "Alice"})  # Returns "Hello, Alice!"
+```
+
+Custom functions should:
+- Return a callable that takes a context parameter
+- Use `genruler.library.compute` for evaluating arguments that might be rules
+- Keep functions pure - only depend on arguments and context
+- Follow the same error handling patterns as built-in functions
 
 ## Error Handling
 
