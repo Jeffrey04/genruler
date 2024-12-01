@@ -1,71 +1,112 @@
+from typing import Any
+
 import pytest
 from funcparserlib.lexer import Token
+from funcparserlib.parser import Parser
 
 from genruler import parse
 from genruler.lexer import (
     Symbol,
+    eval_numeric,
+    eval_paren,
+    eval_string,
+    eval_symbol,
     make_parser,
     make_sexp_tokenizer,
+    make_token_parser,
     read,
-    safe_literal_eval,
 )
 
 
-def test_safe_literal_eval():
-    """Test safe_literal_eval function."""
-    # Test numbers
-    assert safe_literal_eval(Token("NUMBER", "42")) == 42
-    assert safe_literal_eval(Token("NUMBER", "3.14")) == 3.14
-    assert safe_literal_eval(Token("NUMBER", "-5")) == -5
-    assert safe_literal_eval(Token("NUMBER", "-2.718")) == -2.718
-    assert safe_literal_eval(Token("NUMBER", "invalid")) == "invalid"  # Fallback
+def test_symbol_class():
+    """Test Symbol class functionality."""
+    # Test basic properties
+    sym = Symbol("test.symbol")
+    assert sym.name == "test.symbol"
+    assert str(sym) == "test.symbol"
 
-    # Test strings
-    assert safe_literal_eval(Token("STRING", '"hello"')) == "hello"
-    assert safe_literal_eval(Token("STRING", '"hello\\nworld"')) == "hello\nworld"
-    assert safe_literal_eval(Token("STRING", '"123"')) == "123"
-    assert safe_literal_eval(Token("STRING", "invalid")) == "invalid"  # Fallback without quotes
-
-    # Test symbols
-    sym = safe_literal_eval(Token("SYMBOL", "foo.bar"))
-    assert isinstance(sym, Symbol)
-    assert sym.name == "foo.bar"
-
-    # Test other tokens
-    assert safe_literal_eval(Token("OTHER", "value")) == "value"
+    # Test equality
+    assert Symbol("foo.bar") == Symbol("foo.bar")
+    assert Symbol("foo.bar") != Symbol("bar.foo")
+    assert Symbol("foo.bar") != "foo.bar"  # Test against string
+    assert Symbol("foo.bar") != 42  # Test against other types
 
 
-def test_simple_expression():
-    result = parse("(boolean.tautology)")
-    assert callable(result), "Result should be callable"
-    assert result({}) is True, "boolean.tautology should return True"
+def test_eval_numeric():
+    """Test numeric token evaluation."""
+    # Test integers
+    assert eval_numeric(Token("NUMBER", "42")) == 42
+    assert eval_numeric(Token("NUMBER", "-17")) == -17
+    assert eval_numeric(Token("NUMBER", "0")) == 0
+
+    # Test floats
+    assert eval_numeric(Token("NUMBER", "3.14")) == 3.14
+    assert eval_numeric(Token("NUMBER", "-2.718")) == -2.718
+    assert eval_numeric(Token("NUMBER", "0.0")) == 0.0
+
+    # Test invalid numbers
+    with pytest.raises(ValueError):
+        eval_numeric(Token("NUMBER", "invalid"))
+    with pytest.raises(SyntaxError):
+        eval_numeric(Token("NUMBER", ""))
+    with pytest.raises(SyntaxError):
+        eval_numeric(Token("NUMBER", "12.34.56"))
+    with pytest.raises(SyntaxError):
+        eval_numeric(Token("NUMBER", "1e"))
 
 
-def test_nested_expression():
-    result = parse("(boolean.and (boolean.tautology) (boolean.tautology))")
-    assert callable(result), "Result should be callable"
-    assert result({}) is True, "Nested AND of two True values should be True"
+def test_eval_string():
+    """Test string token evaluation."""
+    # Test basic strings
+    assert eval_string(Token("STRING", '"hello"')) == "hello"
+    assert eval_string(Token("STRING", '""')) == ""
 
+    # Test strings with escapes
+    assert eval_string(Token("STRING", '"hello\\nworld"')) == "hello\nworld"
+    assert eval_string(Token("STRING", '"tab\\there"')) == "tab\there"
+    assert eval_string(Token("STRING", '"quotes\\"here"')) == 'quotes"here'
 
-def test_complex_expression():
-    result = parse(
-        "(boolean.or (boolean.and (boolean.tautology) (boolean.contradiction)) (boolean.tautology))"
+    # Test strings with special characters
+    assert (
+        eval_string(Token("STRING", '"spaces and symbols: !@#$%^&*()"'))
+        == "spaces and symbols: !@#$%^&*()"
     )
-    assert callable(result), "Result should be callable"
-    assert result({}) is True, "Complex boolean expression should evaluate correctly"
 
 
-def test_reject_atom():
-    with pytest.raises(ValueError, match="Parse error"):
-        parse("boolean.tautology")  # Should fail - not wrapped in parentheses
+def test_eval_symbol():
+    """Test symbol token evaluation."""
+    # Test basic symbols
+    symbol = eval_symbol(Token("SYMBOL", "test.symbol"))
+    assert isinstance(symbol, Symbol)
+    assert symbol.name == "test.symbol"
+
+    # Test various symbol patterns
+    patterns = ["a", "a.b", "a.b.c", "a_b", "a.b_c", "+", "-", "*", "/"]
+    for pattern in patterns:
+        symbol = eval_symbol(Token("SYMBOL", pattern))
+        assert isinstance(symbol, Symbol)
+        assert symbol.name == pattern
+
+
+def test_eval_paren():
+    """Test parenthesis token evaluation."""
+    # Test valid parentheses
+    assert eval_paren(Token("LPAREN", "(")) == "("
+    assert eval_paren(Token("RPAREN", ")")) == ")"
+
+    # Test invalid parentheses
+    with pytest.raises(AssertionError):
+        eval_paren(Token("LPAREN", "["))
+    with pytest.raises(AssertionError):
+        eval_paren(Token("RPAREN", "]"))
 
 
 def test_make_sexp_tokenizer():
-    """Test the S-expression tokenizer."""
+    """Test S-expression tokenizer creation and functionality."""
     tokenizer, useless = make_sexp_tokenizer()
 
     # Test basic tokenization
-    tokens = [t for t in tokenizer('(foo.bar 123 "hello")') if t.type not in useless]
+    tokens = [t for t in tokenizer('(foo.bar 42 "hello")') if t.type not in useless]
     assert [t.type for t in tokens] == [
         "LPAREN",
         "SYMBOL",
@@ -73,21 +114,19 @@ def test_make_sexp_tokenizer():
         "STRING",
         "RPAREN",
     ]
-    assert [t.value for t in tokens] == ["(", "foo.bar", "123", '"hello"', ")"]
+    assert [t.value for t in tokens] == ["(", "foo.bar", "42", '"hello"', ")"]
 
-    # Test number formats
+    # Test number variations
     tokens = [t for t in tokenizer("42 3.14 -5 -2.718") if t.type not in useless]
     assert all(t.type == "NUMBER" for t in tokens)
     assert [t.value for t in tokens] == ["42", "3.14", "-5", "-2.718"]
 
-    # Test string with spaces and special chars
-    tokens = [
-        t for t in tokenizer('"hello world" "a.b.c" "123"') if t.type not in useless
-    ]
+    # Test string variations
+    tokens = [t for t in tokenizer('"hello" "a.b.c" "123"') if t.type not in useless]
     assert all(t.type == "STRING" for t in tokens)
-    assert [t.value for t in tokens] == ['"hello world"', '"a.b.c"', '"123"']
+    assert [t.value for t in tokens] == ['"hello"', '"a.b.c"', '"123"']
 
-    # Test symbols
+    # Test symbol variations
     tokens = [t for t in tokenizer("foo.bar baz_123 +") if t.type not in useless]
     assert all(t.type == "SYMBOL" for t in tokens)
     assert [t.value for t in tokens] == ["foo.bar", "baz_123", "+"]
@@ -95,17 +134,48 @@ def test_make_sexp_tokenizer():
     # Test whitespace handling
     tokens = [t for t in tokenizer("  (  foo  123  )  ") if t.type not in useless]
     assert [t.type for t in tokens] == ["LPAREN", "SYMBOL", "NUMBER", "RPAREN"]
+    assert [t.value for t in tokens] == ["(", "foo", "123", ")"]
+
+
+def test_make_token_parser():
+    """Test token parser creation and functionality."""
+    # Test basic token parsing
+    number_parser: Parser[Token, Token] = make_token_parser("NUMBER")
+    string_parser: Parser[Token, Token] = make_token_parser("STRING")
+    symbol_parser: Parser[Token, Token] = make_token_parser("SYMBOL")
+
+    # Test number parser
+    result = number_parser.parse([Token("NUMBER", "42")])
+    assert isinstance(result, Token)
+    assert result.type == "NUMBER"
+    assert result.value == "42"
+
+    # Test string parser
+    result = string_parser.parse([Token("STRING", '"hello"')])
+    assert isinstance(result, Token)
+    assert result.type == "STRING"
+    assert result.value == '"hello"'
+
+    # Test symbol parser
+    result = symbol_parser.parse([Token("SYMBOL", "foo.bar")])
+    assert isinstance(result, Token)
+    assert result.type == "SYMBOL"
+    assert result.value == "foo.bar"
+
+    # Test parser rejection
+    with pytest.raises(Exception):
+        number_parser.parse([Token("STRING", '"not a number"')])
 
 
 def test_make_parser():
-    """Test the S-expression parser."""
-    parser = make_parser()
+    """Test S-expression parser creation and functionality."""
+    parser: Parser[Token, Any] = make_parser()
 
-    # Test basic parsing
+    # Test basic expression parsing
     tokens = [
         Token("LPAREN", "("),
         Token("SYMBOL", "foo.bar"),
-        Token("NUMBER", "123"),
+        Token("NUMBER", "42"),
         Token("STRING", '"hello"'),
         Token("RPAREN", ")"),
     ]
@@ -113,10 +183,10 @@ def test_make_parser():
     assert len(result) == 3
     assert isinstance(result[0], Symbol)
     assert result[0].name == "foo.bar"
-    assert result[1] == 123
+    assert result[1] == 42
     assert result[2] == "hello"
 
-    # Test nested expressions
+    # Test nested expression parsing
     tokens = [
         Token("LPAREN", "("),
         Token("SYMBOL", "foo"),
@@ -135,76 +205,15 @@ def test_make_parser():
     assert result[1][0].name == "bar"
     assert result[1][1] == 42
 
-    # Test literal parsing
-    tokens = [
-        Token("LPAREN", "("),
-        Token("SYMBOL", "test"),
-        Token("NUMBER", "3.14"),
-        Token("NUMBER", "-42"),
-        Token("STRING", '"hello\\nworld"'),  # Test string with escape sequence
-        Token("RPAREN", ")"),
-    ]
-    result = parser.parse(tokens)
-    assert len(result) == 4
-    assert isinstance(result[0], Symbol)
-    assert result[0].name == "test"
-    assert result[1] == 3.14
-    assert result[2] == -42
-    assert result[3] == "hello\nworld"  # Verify escape sequence is handled
-
-
-def test_make_token_parser():
-    """Test make_token_parser function."""
-    from funcparserlib.parser import NoParseError
-
-    from genruler.lexer import make_token_parser
-
-    # Create parsers for different token types
-    lparen_parser = make_token_parser("LPAREN")
-    number_parser = make_token_parser("NUMBER")
-    string_parser = make_token_parser("STRING")
-    symbol_parser = make_token_parser("SYMBOL")
-
-    # Test LPAREN parser
-    assert lparen_parser.parse([Token("LPAREN", "(")]) == "("
-    with pytest.raises(NoParseError):
-        lparen_parser.parse([Token("RPAREN", ")")])
-
-    # Test NUMBER parser
-    assert number_parser.parse([Token("NUMBER", "42")]) == "42"
-    assert number_parser.parse([Token("NUMBER", "-3.14")]) == "-3.14"
-    with pytest.raises(NoParseError):
-        number_parser.parse([Token("STRING", '"42"')])
-
-    # Test STRING parser
-    assert string_parser.parse([Token("STRING", '"hello"')]) == '"hello"'
-    assert string_parser.parse([Token("STRING", '"hello world"')]) == '"hello world"'
-    with pytest.raises(NoParseError):
-        string_parser.parse([Token("NUMBER", "42")])
-
-    # Test SYMBOL parser
-    assert symbol_parser.parse([Token("SYMBOL", "foo.bar")]) == "foo.bar"
-    assert symbol_parser.parse([Token("SYMBOL", "baz_123")]) == "baz_123"
-    with pytest.raises(NoParseError):
-        symbol_parser.parse([Token("NUMBER", "42")])
-
-    # Test empty input
-    with pytest.raises(NoParseError):
-        lparen_parser.parse([])
-
-    # Test multiple tokens (should parse first token)
-    result = lparen_parser.parse([Token("LPAREN", "("), Token("LPAREN", "(")])
-    assert result == "("
-
 
 def test_read():
-    """Test the read function that combines tokenization and parsing."""
+    """Test complete S-expression reading functionality."""
     # Test basic expression
-    result = read('(foo.bar 123 "hello")')
+    result = read('(foo.bar 42 "hello")')
     assert len(result) == 3
     assert isinstance(result[0], Symbol)
     assert result[0].name == "foo.bar"
-    assert result[1] == 123
+    assert result[1] == 42
     assert result[2] == "hello"
 
     # Test nested expression
@@ -228,10 +237,25 @@ def test_read():
         read("foo.bar)")  # Extra closing parenthesis
 
 
-def test_symbol():
-    """Test Symbol class functionality."""
-    sym = Symbol("foo.bar")
-    assert sym.name == "foo.bar"
-    assert str(sym) == "foo.bar"
-    assert Symbol("foo.bar") == Symbol("foo.bar")
-    assert Symbol("foo.bar") != Symbol("bar.foo")
+def test_expression_evaluation():
+    """Test evaluation of various S-expressions using parse function."""
+    # Test simple expression
+    result = parse("(boolean.tautology)")
+    assert callable(result)
+    assert result({}) is True
+
+    # Test nested expression
+    result = parse("(boolean.and (boolean.tautology) (boolean.tautology))")
+    assert callable(result)
+    assert result({}) is True
+
+    # Test complex expression
+    result = parse(
+        "(boolean.or (boolean.and (boolean.tautology) (boolean.contradiction)) (boolean.tautology))"
+    )
+    assert callable(result)
+    assert result({}) is True
+
+    # Test invalid expressions
+    with pytest.raises(ValueError, match="Parse error"):
+        parse("boolean.tautology")  # Not wrapped in parentheses

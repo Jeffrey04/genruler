@@ -1,5 +1,7 @@
 import ast
 from dataclasses import dataclass
+from operator import itemgetter
+from typing import Any
 
 from funcparserlib.lexer import Token, make_tokenizer
 from funcparserlib.parser import NoParseError, Parser, forward_decl, many, some
@@ -13,6 +15,23 @@ class Symbol:
 
     def __str__(self) -> str:
         return self.name
+
+def eval_numeric(token: Token) -> int | float:
+    return ast.literal_eval(token.value)
+
+
+def eval_string(token: Token) -> str:
+    return ast.literal_eval(token.value)
+
+
+def eval_symbol(token: Token) -> Symbol:
+    return Symbol(token.value)
+
+
+def eval_paren(token: Token) -> str:
+    assert token.value in ("(", ")")
+
+    return token.value
 
 
 def make_sexp_tokenizer():
@@ -36,45 +55,27 @@ def make_sexp_tokenizer():
     return make_tokenizer(specs), set(useless)
 
 
-def safe_literal_eval(token: Token) -> str | int | float | Symbol:
-    """Safely evaluate a token into a Python value.
+def make_token_parser(token_type: str) -> Parser[Token, Token]:
+    """Create a parser for matching tokens of a specific type.
+
+    Uses funcparserlib's 'some' combinator to create a parser that matches tokens
+    based on their type. The parser will only match tokens that have the exact
+    type specified.
 
     Args:
-        token: The token to evaluate
+        token_type (str): The type of token to match (e.g. 'NUMBER', 'STRING', 'SYMBOL')
 
     Returns:
-        The evaluated value as the appropriate Python type:
-        - NUMBER tokens become int or float
-        - STRING tokens become str
-        - SYMBOL tokens become Symbol objects
-        - Other tokens return their value as is
+        Parser: A parser that matches tokens of the specified type and returns the token
     """
-    match token.type:
-        case "NUMBER" | "STRING":
-            try:
-                return ast.literal_eval(token.value)
-            except (ValueError, SyntaxError):
-                # For strings, return the value as is if literal_eval fails
-                return token.value if token.type == "NUMBER" else token.value
-        case "SYMBOL":
-            return Symbol(token.value)
-        case _:
-            return token.value
+
+    def pred(t: Token) -> bool:
+        return t.type == token_type
+
+    return some(pred)
 
 
-def make_token_parser(token_type: str):
-    """Create a parser for a specific token type.
-
-    Args:
-        token_type: The type of token to parse
-
-    Returns:
-        A parser that matches tokens of the specified type and returns their value
-    """
-    return some(lambda t: t.type == token_type) >> (lambda t: t.value)
-
-
-def make_parser() -> Parser:
+def make_parser() -> Parser[Token, Any]:
     """Create a parser for S-expressions.
 
     Returns:
@@ -84,26 +85,26 @@ def make_parser() -> Parser:
     expr = forward_decl()
 
     # Basic parsers for each token type
-    lparen = make_token_parser("LPAREN")
-    rparen = make_token_parser("RPAREN")
+    lparen = make_token_parser("LPAREN") >> eval_paren
+    rparen = make_token_parser("RPAREN") >> eval_paren
 
     # Convert tokens to Python values
-    number = some(lambda t: t.type == "NUMBER") >> safe_literal_eval
-    string = some(lambda t: t.type == "STRING") >> safe_literal_eval
-    symbol = some(lambda t: t.type == "SYMBOL") >> safe_literal_eval
+    number = make_token_parser("NUMBER") >> eval_numeric
+    string = make_token_parser("STRING") >> eval_string
+    symbol = make_token_parser("SYMBOL") >> eval_symbol
 
     # Atom can be number, string, or symbol
     atom = number | string | symbol
 
     # List is a sequence of expressions in parentheses
     list_expr = (lparen + many(expr) + rparen) >> (
-        lambda x: x[1]
+        itemgetter(1)
     )  # Extract items between parentheses
 
     # Only allow list expressions at the top level
     expr.define(atom | list_expr)
     top_level = (lparen + many(expr) + rparen) >> (
-        lambda x: x[1]
+        itemgetter(1)
     )  # Extract items between parentheses
 
     return top_level
