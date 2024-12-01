@@ -4,7 +4,7 @@ from genruler.library import compute
 from genruler.modules import basic
 
 
-def field(key: str, *args) -> Callable[[dict[Any, Any] | list[Any]], Any]:
+def field(key: str | int, *args) -> Callable[[dict[Any, Any] | list[Any]], Any]:
     def inner(context: dict[Any, Any] | list[Any]) -> Any:
         return str(compute(basic.field(compute(key, context), *args), context))
 

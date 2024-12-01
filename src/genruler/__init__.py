@@ -7,11 +7,11 @@ from .lexer import read
 from .library import evaluate
 
 
-def parse(input: str, env: ModuleType | None = None) -> Callable[[Any], Any]:
+def parse(input: str, env: ModuleType | object | None = None) -> Callable[[Any], Any]:
     """Parse an S-expression string into a callable function.
 
-    This function takes an S-expression string (e.g., "(module.function arg1 arg2)") and 
-    converts it into a callable function. The S-expression can reference functions from 
+    This function takes an S-expression string (e.g., "(module.function arg1 arg2)") and
+    converts it into a callable function. The S-expression can reference functions from
     either the provided environment module or from genruler's built-in modules.
 
     Args:

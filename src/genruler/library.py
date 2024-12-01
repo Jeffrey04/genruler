@@ -36,7 +36,7 @@ def compute[T, U, V](argument: Callable[[T], U] | V, context: T) -> U | V:
 
 
 def evaluate(
-    sequence: List[Any], env: ModuleType | None, result=None
+    sequence: List[Any], env: ModuleType | object | None, result=None
 ) -> tuple[Any] | Callable[[Any], Any]:
     """Evaluate an S-expression sequence into a callable or value.
 
@@ -111,7 +111,9 @@ def evaluate(
     return to_return
 
 
-def get_function(function_name: str, env: ModuleType | None):
+def get_function(
+    function_name: str, env: ModuleType | object | None
+) -> Callable[..., Any]:
     try:
         assert env
 

@@ -107,10 +107,10 @@ class field:
         args: Optional default value for dictionary access
     """
 
-    key: str
+    key: str | int
     args: tuple[Any, ...]
 
-    def __init__(self, key: str, *args: Any) -> None:
+    def __init__(self, key: str | int, *args: Any) -> None:
         """Initialize with key/index and optional default value.
 
         Args:
@@ -145,7 +145,7 @@ class field:
             return itemgetter(compute(self.key, context))(context)
 
 
-class value:
+class value[T]:
     """Hold a constant value that ignores context.
 
     A simple wrapper that returns the same value regardless of context.

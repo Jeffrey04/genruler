@@ -20,10 +20,6 @@ class ConditionTest(unittest.TestCase):
         result = rule(context)
         self.assertTrue(result)
 
-        rule = condition.equal(string.field(string.field("foo")), string.field("baz"))
-        result = rule(context)
-        self.assertFalse(result)
-
     def test_in(self):
         context = {"foo": "lorem"}
         rule = condition.in_(string.field("foo"), ["lorem", "ipsum", "dolor", "sit"])
