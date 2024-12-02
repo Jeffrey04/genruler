@@ -4,7 +4,7 @@ from operator import itemgetter
 from typing import Any
 
 from funcparserlib.lexer import Token, make_tokenizer
-from funcparserlib.parser import NoParseError, Parser, forward_decl, many, some
+from funcparserlib.parser import NoParseError, Parser, forward_decl, many, tok
 
 
 @dataclass
@@ -15,23 +15,6 @@ class Symbol:
 
     def __str__(self) -> str:
         return self.name
-
-def eval_numeric(token: Token) -> int | float:
-    return ast.literal_eval(token.value)
-
-
-def eval_string(token: Token) -> str:
-    return ast.literal_eval(token.value)
-
-
-def eval_symbol(token: Token) -> Symbol:
-    return Symbol(token.value)
-
-
-def eval_paren(token: Token) -> str:
-    assert token.value in ("(", ")")
-
-    return token.value
 
 
 def make_sexp_tokenizer():
@@ -55,26 +38,6 @@ def make_sexp_tokenizer():
     return make_tokenizer(specs), set(useless)
 
 
-def make_token_parser(token_type: str) -> Parser[Token, Token]:
-    """Create a parser for matching tokens of a specific type.
-
-    Uses funcparserlib's 'some' combinator to create a parser that matches tokens
-    based on their type. The parser will only match tokens that have the exact
-    type specified.
-
-    Args:
-        token_type (str): The type of token to match (e.g. 'NUMBER', 'STRING', 'SYMBOL')
-
-    Returns:
-        Parser: A parser that matches tokens of the specified type and returns the token
-    """
-
-    def pred(t: Token) -> bool:
-        return t.type == token_type
-
-    return some(pred)
-
-
 def make_parser() -> Parser[Token, Any]:
     """Create a parser for S-expressions.
 
@@ -85,13 +48,13 @@ def make_parser() -> Parser[Token, Any]:
     expr = forward_decl()
 
     # Basic parsers for each token type
-    lparen = make_token_parser("LPAREN") >> eval_paren
-    rparen = make_token_parser("RPAREN") >> eval_paren
+    lparen = tok("LPAREN")
+    rparen = tok("RPAREN")
 
     # Convert tokens to Python values
-    number = make_token_parser("NUMBER") >> eval_numeric
-    string = make_token_parser("STRING") >> eval_string
-    symbol = make_token_parser("SYMBOL") >> eval_symbol
+    number = tok("NUMBER") >> ast.literal_eval
+    string = tok("STRING") >> ast.literal_eval
+    symbol = tok("SYMBOL") >> Symbol
 
     # Atom can be number, string, or symbol
     atom = number | string | symbol

@@ -7,13 +7,8 @@ from funcparserlib.parser import Parser
 from genruler import parse
 from genruler.lexer import (
     Symbol,
-    eval_numeric,
-    eval_paren,
-    eval_string,
-    eval_symbol,
     make_parser,
     make_sexp_tokenizer,
-    make_token_parser,
     read,
 )
 
@@ -30,75 +25,6 @@ def test_symbol_class():
     assert Symbol("foo.bar") != Symbol("bar.foo")
     assert Symbol("foo.bar") != "foo.bar"  # Test against string
     assert Symbol("foo.bar") != 42  # Test against other types
-
-
-def test_eval_numeric():
-    """Test numeric token evaluation."""
-    # Test integers
-    assert eval_numeric(Token("NUMBER", "42")) == 42
-    assert eval_numeric(Token("NUMBER", "-17")) == -17
-    assert eval_numeric(Token("NUMBER", "0")) == 0
-
-    # Test floats
-    assert eval_numeric(Token("NUMBER", "3.14")) == 3.14
-    assert eval_numeric(Token("NUMBER", "-2.718")) == -2.718
-    assert eval_numeric(Token("NUMBER", "0.0")) == 0.0
-
-    # Test invalid numbers
-    with pytest.raises(ValueError):
-        eval_numeric(Token("NUMBER", "invalid"))
-    with pytest.raises(SyntaxError):
-        eval_numeric(Token("NUMBER", ""))
-    with pytest.raises(SyntaxError):
-        eval_numeric(Token("NUMBER", "12.34.56"))
-    with pytest.raises(SyntaxError):
-        eval_numeric(Token("NUMBER", "1e"))
-
-
-def test_eval_string():
-    """Test string token evaluation."""
-    # Test basic strings
-    assert eval_string(Token("STRING", '"hello"')) == "hello"
-    assert eval_string(Token("STRING", '""')) == ""
-
-    # Test strings with escapes
-    assert eval_string(Token("STRING", '"hello\\nworld"')) == "hello\nworld"
-    assert eval_string(Token("STRING", '"tab\\there"')) == "tab\there"
-    assert eval_string(Token("STRING", '"quotes\\"here"')) == 'quotes"here'
-
-    # Test strings with special characters
-    assert (
-        eval_string(Token("STRING", '"spaces and symbols: !@#$%^&*()"'))
-        == "spaces and symbols: !@#$%^&*()"
-    )
-
-
-def test_eval_symbol():
-    """Test symbol token evaluation."""
-    # Test basic symbols
-    symbol = eval_symbol(Token("SYMBOL", "test.symbol"))
-    assert isinstance(symbol, Symbol)
-    assert symbol.name == "test.symbol"
-
-    # Test various symbol patterns
-    patterns = ["a", "a.b", "a.b.c", "a_b", "a.b_c", "+", "-", "*", "/"]
-    for pattern in patterns:
-        symbol = eval_symbol(Token("SYMBOL", pattern))
-        assert isinstance(symbol, Symbol)
-        assert symbol.name == pattern
-
-
-def test_eval_paren():
-    """Test parenthesis token evaluation."""
-    # Test valid parentheses
-    assert eval_paren(Token("LPAREN", "(")) == "("
-    assert eval_paren(Token("RPAREN", ")")) == ")"
-
-    # Test invalid parentheses
-    with pytest.raises(AssertionError):
-        eval_paren(Token("LPAREN", "["))
-    with pytest.raises(AssertionError):
-        eval_paren(Token("RPAREN", "]"))
 
 
 def test_make_sexp_tokenizer():
@@ -135,36 +61,6 @@ def test_make_sexp_tokenizer():
     tokens = [t for t in tokenizer("  (  foo  123  )  ") if t.type not in useless]
     assert [t.type for t in tokens] == ["LPAREN", "SYMBOL", "NUMBER", "RPAREN"]
     assert [t.value for t in tokens] == ["(", "foo", "123", ")"]
-
-
-def test_make_token_parser():
-    """Test token parser creation and functionality."""
-    # Test basic token parsing
-    number_parser: Parser[Token, Token] = make_token_parser("NUMBER")
-    string_parser: Parser[Token, Token] = make_token_parser("STRING")
-    symbol_parser: Parser[Token, Token] = make_token_parser("SYMBOL")
-
-    # Test number parser
-    result = number_parser.parse([Token("NUMBER", "42")])
-    assert isinstance(result, Token)
-    assert result.type == "NUMBER"
-    assert result.value == "42"
-
-    # Test string parser
-    result = string_parser.parse([Token("STRING", '"hello"')])
-    assert isinstance(result, Token)
-    assert result.type == "STRING"
-    assert result.value == '"hello"'
-
-    # Test symbol parser
-    result = symbol_parser.parse([Token("SYMBOL", "foo.bar")])
-    assert isinstance(result, Token)
-    assert result.type == "SYMBOL"
-    assert result.value == "foo.bar"
-
-    # Test parser rejection
-    with pytest.raises(Exception):
-        number_parser.parse([Token("STRING", '"not a number"')])
 
 
 def test_make_parser():
