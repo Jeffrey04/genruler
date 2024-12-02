@@ -7,10 +7,9 @@ from genruler.lexer import Symbol
 class LibraryTest(unittest.TestCase):
     def test_compute(self):
         context = {"foo": "bar"}
-        arg = lambda context: context["foo"]
         expected = "bar"
 
-        result = library.compute(arg, context)
+        result = library.compute(lambda context: context["foo"], context)
         self.assertEqual(result, expected)
 
         arg = "meow"
@@ -30,7 +29,9 @@ class LibraryTest(unittest.TestCase):
 
     def test_compute_with_different_contexts(self):
         # Test with different context types
-        fn = lambda x: str(x)
+        def fn(x):
+            return str(x)
+
         self.assertEqual(library.compute(fn, 123), "123")
         self.assertEqual(library.compute(fn, [1, 2, 3]), "[1, 2, 3]")
         self.assertEqual(library.compute(fn, {"a": 1}), "{'a': 1}")
@@ -76,7 +77,7 @@ class LibraryTest(unittest.TestCase):
     def test_evaluate_errors(self):
         # Test invalid sequence type
         with self.assertRaises(TypeError):
-            library.evaluate("not a list", None)
+            library.evaluate("not a list", None)  # type: ignore
 
         # Test invalid function name
         with self.assertRaises(library.InvalidFunctionNameError):

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from functools import reduce
 from operator import itemgetter
 from typing import Any, TypeVar
@@ -107,10 +108,12 @@ class field:
         args: Optional default value for dictionary access
     """
 
-    key: str | int
+    key: Callable[[dict[Any, Any]], str | int] | str | int
     args: tuple[Any, ...]
 
-    def __init__(self, key: str | int, *args: Any) -> None:
+    def __init__(
+        self, key: Callable[[dict[Any, Any]], str | int] | str | int, *args: Any
+    ) -> None:
         """Initialize with key/index and optional default value.
 
         Args:
@@ -135,14 +138,16 @@ class field:
         Returns:
             The value at the specified key/index, or the default value
         """
+        key = compute(self.key, context)  # type: ignore
+
         if isinstance(context, dict):
             return (
-                context.get(self.key, compute(self.args[0], context))
+                context.get(key, compute(self.args[0], context))
                 if self.args
-                else context[self.key]
+                else context[key]
             )
         else:
-            return itemgetter(compute(self.key, context))(context)
+            return itemgetter(key)(context)
 
 
 class value[T]:

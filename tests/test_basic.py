@@ -167,7 +167,7 @@ class BasicTest(unittest.TestCase):
         # Test with invalid index type
         with self.assertRaises((TypeError, AttributeError)):
             context = ["a", "b", "c"]
-            func = basic.field(object())  # object() can't be used as an index
+            func = basic.field(object())  # type: ignore
             func(context)
 
     def test_field_computed_index(self):
@@ -191,7 +191,7 @@ class BasicTest(unittest.TestCase):
 
         # Test with non-string/non-int keys
         context = {("tuple", "key"): "value"}
-        func = basic.field(("tuple", "key"))
+        func = basic.field(("tuple", "key"))  # type: ignore
         self.assertEqual(func(context), "value")
 
         # Test default value with error in callable
